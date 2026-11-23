@@ -1,5 +1,8 @@
 package com.lxkasmehl.ankiaudio
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.WindowManager
@@ -137,6 +140,37 @@ private fun DeckList(home: HomeState, onPick: (com.lxkasmehl.ankiaudio.anki.Deck
 }
 
 @Composable
+private fun TtsHelp() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun open(vararg intents: Intent) {
+        for (intent in intents) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    Text(
+        "Installiere eine Sprachausgabe und stelle sie als Standard ein. Am besten \"Sprachausgabe von Google\" " +
+            "(Speech Services by Google). Ohne Play Store gehen z.B. RHVoice oder eSpeak NG aus F-Droid. " +
+            "Danach hier auf Beenden tippen und das Deck neu starten.",
+    )
+    Spacer(Modifier.height(8.dp))
+    Button(onClick = {
+        open(
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.tts")),
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.tts")),
+        )
+    }, Modifier.fillMaxWidth()) { Text("Google-Sprachausgabe installieren") }
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(onClick = {
+        open(Intent("com.android.settings.TTS_SETTINGS"), Intent(android.provider.Settings.ACTION_SETTINGS))
+    }, Modifier.fillMaxWidth()) { Text("Sprachausgabe-Einstellungen öffnen") }
+}
+
+@Composable
 private fun SessionScreen(s: SessionState, onCommand: (Command) -> Unit, onStop: () -> Unit) {
     val activity = androidx.compose.ui.platform.LocalContext.current as? MainActivity
     LaunchedEffect(s.phase) {
@@ -152,7 +186,7 @@ private fun SessionScreen(s: SessionState, onCommand: (Command) -> Unit, onStop:
         s.lastSkipReason?.let {
             Text("Zuletzt übersprungen: $it", style = MaterialTheme.typography.bodySmall)
         }
-        s.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (s.phase != Phase.ERROR) s.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))
 
         Column(
@@ -163,7 +197,10 @@ private fun SessionScreen(s: SessionState, onCommand: (Command) -> Unit, onStop:
             when (s.phase) {
                 Phase.LOADING -> Text("Lade Karten…")
                 Phase.FINISHED -> Text("Fertig für heute in diesem Deck.", style = MaterialTheme.typography.titleLarge)
-                Phase.ERROR -> Text("Fehler: ${s.message}", color = MaterialTheme.colorScheme.error)
+                Phase.ERROR -> {
+                    Text("Fehler: ${s.message}", color = MaterialTheme.colorScheme.error)
+                    if (s.ttsMissing) TtsHelp()
+                }
                 else -> {
                     Text(s.front, style = MaterialTheme.typography.titleLarge)
                     if (s.phase == Phase.BACK) {

@@ -32,6 +32,8 @@ data class SessionState(
     val skipped: Int = 0,
     val lastSkipReason: String? = null,
     val message: String? = null,
+    /** Fehler liegt an fehlender Sprachausgabe: UI bietet Links zu Einstellungen/Installation an. */
+    val ttsMissing: Boolean = false,
 )
 
 sealed interface Command {
@@ -70,7 +72,13 @@ class SessionController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(phase = Phase.ERROR, message = e.message ?: e.toString()) }
+                _state.update {
+                    it.copy(
+                        phase = Phase.ERROR,
+                        message = e.message ?: e.toString(),
+                        ttsMissing = e is com.lxkasmehl.ankiaudio.tts.TtsUnavailableException,
+                    )
+                }
             } finally {
                 speaker.stop()
             }
