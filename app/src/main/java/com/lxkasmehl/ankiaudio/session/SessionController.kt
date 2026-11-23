@@ -75,7 +75,11 @@ class SessionController(
                 _state.update {
                     it.copy(
                         phase = Phase.ERROR,
-                        message = e.message ?: e.toString(),
+                        message = if (e is com.lxkasmehl.ankiaudio.tts.TtsUnavailableException) {
+                            e.message
+                        } else {
+                            "${e.javaClass.simpleName}: ${e.message}"
+                        },
                         ttsMissing = e is com.lxkasmehl.ankiaudio.tts.TtsUnavailableException,
                     )
                 }
@@ -134,6 +138,12 @@ class SessionController(
                     _state.update { it.copy(skipped = it.skipped + 1, lastSkipReason = "Von dir übersprungen") }
                     feedback.skipped()
                 }
+                is Outcome.Failed -> {
+                    // Karte nicht nochmal in dieser Session, sonst hängt man in einer Schleife.
+                    skippedKeys += card.key
+                    _state.update { it.copy(skipped = it.skipped + 1, message = outcome.reason) }
+                    feedback.rated(1)
+                }
             }
         }
     }
@@ -141,6 +151,7 @@ class SessionController(
     private sealed interface Outcome {
         data class Rated(val ease: Int) : Outcome
         data object Skipped : Outcome
+        data class Failed(val reason: String) : Outcome
     }
 
     private suspend fun playCard(card: PreparedCard, buttonCount: Int, inbox: Channel<Command>): Outcome =
@@ -153,9 +164,22 @@ class SessionController(
             }
             suspend fun rate(ease: Int): Outcome {
                 speech?.cancel()
-                val ok = repo.answer(card.key, mapEase(ease, buttonCount), System.currentTimeMillis() - startedAt)
-                if (!ok) _state.update { it.copy(message = "Bewertung wurde von AnkiDroid nicht angenommen") }
-                return Outcome.Rated(ease)
+                val mapped = mapEase(ease, buttonCount)
+                return try {
+                    val updated = repo.answer(card.key, mapped, System.currentTimeMillis() - startedAt)
+                    if (updated > 0) {
+                        Outcome.Rated(ease)
+                    } else {
+                        Outcome.Failed(
+                            "Bewertung nicht gespeichert: AnkiDroid hat 0 Karten aktualisiert " +
+                                "(Notiz ${card.key.noteId}, Karte ${card.key.ord}, Ease $mapped, Knöpfe $buttonCount)",
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Outcome.Failed("Bewertung fehlgeschlagen: ${e.javaClass.simpleName}: ${e.message}")
+                }
             }
 
             // Vorderseite

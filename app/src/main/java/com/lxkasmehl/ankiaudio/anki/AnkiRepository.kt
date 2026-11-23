@@ -109,15 +109,15 @@ class AnkiRepository(context: Context) {
         )
     }
 
-    /** Bewertet die Karte: ease 1 = Again, 2 = Hard, 3 = Good, 4 = Easy. */
-    suspend fun answer(key: CardKey, ease: Int, timeTakenMs: Long): Boolean = withContext(Dispatchers.IO) {
+    /** Bewertet die Karte: ease 1 = Again, 2 = Hard, 3 = Good, 4 = Easy. @return Anzahl aktualisierter Karten. */
+    suspend fun answer(key: CardKey, ease: Int, timeTakenMs: Long): Int = withContext(Dispatchers.IO) {
         val values = ContentValues().apply {
             put(AnkiContract.ReviewInfo.NOTE_ID, key.noteId)
             put(AnkiContract.ReviewInfo.CARD_ORD, key.ord)
             put(AnkiContract.ReviewInfo.EASE, ease)
             put(AnkiContract.ReviewInfo.TIME_TAKEN, timeTakenMs)
         }
-        resolver.update(AnkiContract.ReviewInfo.CONTENT_URI, values, null, null) > 0
+        resolver.update(AnkiContract.ReviewInfo.CONTENT_URI, values, null, null)
     }
 
     private fun model(mid: Long): Pair<String, List<String>> = modelCache.getOrPut(mid) {
